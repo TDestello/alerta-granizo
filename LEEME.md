@@ -7,6 +7,14 @@
 | **Pronóstico** | Open-Meteo (modelos GFS + ECMWF)     | horas a 1–2 días  | 1 h (cache) |
 | **En vivo**    | Rayos del satélite GOES-19 (GLM, NOAA) | 10–60 minutos   | 5 min       |
 
+### Página web
+
+**https://tdestello.github.io/alerta-granizo/** (`index.html`, publicada con GitHub Pages).
+Todo se calcula en el navegador: pide el pronóstico a Open-Meteo, baja los rayos del GOES-19
+directo de NOAA (los lee con `h5wasm`) y las nubes infrarrojas de NASA GIBS. No necesita servidor.
+Los rayos se refrescan cada 2 min, el pronóstico cada 30 min. Si cambiás la lógica del índice
+en `alerta_granizo.py`, cambiala también en `index.html`.
+
 ### Pronóstico: índice SHIP
 
 | SHIP   | Riesgo   | Qué significa                             |
