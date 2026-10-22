@@ -1,0 +1,71 @@
+name: Alerta granizo
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # GitHub no garantiza la hora exacta: puede atrasarse unos minutos
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: "Qué correr"
+        type: choice
+        options: [normal, prueba, dry-run]
+        default: normal
+
+permissions:
+  contents: write   # solo para el commit vacío que mantiene vivo el cron
+
+concurrency:
+  group: alerta
+  cancel-in-progress: false
+
+jobs:
+  alerta:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      # El estado (avisos ya enviados + pronóstico) se pasa de una corrida a otra por la cache.
+      - name: Recuperar estado
+        uses: actions/cache/restore@v4
+        with:
+          path: estado_alertas.json
+          key: estado-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: estado-
+
+      - name: Correr alerta
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          case "${{ inputs.modo }}" in
+            prueba)  python alerta_granizo.py --test ;;
+            dry-run) python alerta_granizo.py --dry-run --forzar ;;
+            *)       python alerta_granizo.py ;;
+          esac
+
+      - name: Guardar estado
+        if: always() && hashFiles('estado_alertas.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: estado_alertas.json
+          key: estado-${{ github.run_id }}-${{ github.run_attempt }}
+
+      # GitHub apaga los cron de los repos sin actividad en 60 días.
+      - name: Mantener vivo el cron
+        run: |
+          ultimo=$(git log -1 --format=%ct)
+          if [ $(( $(date +%s) - ultimo )) -gt $(( 50 * 86400 )) ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit --allow-empty -m "Mantener activo el cron"
+            git push
+          fi
