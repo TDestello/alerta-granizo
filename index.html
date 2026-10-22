@@ -75,6 +75,11 @@ header p { margin: 2px 0 0; color: var(--text-secondary); font-size: 14px; }
 .ring-label { color: var(--text-secondary); font-size: 11px; font-weight: 600; white-space: nowrap;
   text-shadow: 0 0 3px var(--surface-1), 0 0 3px var(--surface-1); }
 .leaflet-container { background: var(--surface-1); font: inherit; }
+.mapa-base { filter: grayscale(.6) contrast(.9); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .mapa-base { filter: grayscale(.6) invert(1) hue-rotate(180deg) brightness(.85) contrast(.9); }
+}
+:root[data-theme="dark"] .mapa-base { filter: grayscale(.6) invert(1) hue-rotate(180deg) brightness(.85) contrast(.9); }
 
 /* gráfico */
 .leyenda { display: flex; gap: 16px; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; flex-wrap: wrap; }
@@ -157,7 +162,7 @@ footer a { color: var(--text-secondary); }
       tormenta fuerte ahora; un salto brusco en la cantidad es señal típica de granizo.</p>
     <p>Datos: modelos vía <a href="https://open-meteo.com/">Open-Meteo</a> (CC BY 4.0) · rayos: GLM del GOES-19,
       <a href="https://registry.opendata.aws/noaa-goes/">NOAA</a> · nubes: <a href="https://earthdata.nasa.gov/gibs">NASA GIBS</a> ·
-      mapa © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, © <a href="https://carto.com/">CARTO</a>.</p>
+      mapa © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>.</p>
     <p>Proyecto personal, no oficial. Alertas oficiales: <a href="https://www.smn.gob.ar/alertas">smn.gob.ar/alertas</a>.</p>
   </footer>
 </main>
@@ -167,7 +172,11 @@ footer a { color: var(--text-secondary); }
 import h5wasm from "https://cdn.jsdelivr.net/npm/h5wasm@0.10.3/dist/esm/hdf5_hl.js";
 
 // ------------------------------------------------------------------ configuración
-const LAT = -33.1547, LON = -60.5086;
+// Se puede mirar otro lugar con ?lat=-32.95&lon=-60.64&lugar=Rosario
+const URL_P = new URLSearchParams(location.search);
+const LAT = +(URL_P.get("lat") ?? -33.1547), LON = +(URL_P.get("lon") ?? -60.5086);
+const LUGAR = URL_P.get("lugar") ?? (URL_P.has("lat") ? `${LAT.toFixed(2)}, ${LON.toFixed(2)}` : "Arroyo Seco");
+document.querySelector("header h1").textContent = `Alerta de granizo · ${LUGAR}`;
 const MODELOS = ["gfs_seamless", "ecmwf_ifs025"];
 const NOMBRE = { gfs_seamless: "GFS", ecmwf_ifs025: "ECMWF" };
 const COLOR = { gfs_seamless: "--series-1", ecmwf_ifs025: "--series-2" };
@@ -360,10 +369,9 @@ function analizarRayos(rayos, riesgoPronostico) {
 }
 
 // ------------------------------------------------------------------ mapa
-const oscuro = () => css("color-scheme") === "dark";
 const mapa = L.map("mapa", { zoomControl: true, attributionControl: true }).setView([LAT, LON], 8);
-L.tileLayer(`https://{s}.basemaps.cartocdn.com/${oscuro() ? "dark_all" : "light_all"}/{z}/{x}/{y}{r}.png`, {
-  attribution: "© OpenStreetMap © CARTO", subdomains: "abcd", maxZoom: 12,
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution: "© OpenStreetMap", maxZoom: 12, className: "mapa-base",
 }).addTo(mapa);
 let capaNubes = null;
 const capaRayos = L.layerGroup().addTo(mapa);
@@ -386,7 +394,7 @@ async function ponerNubes() {
     const ok = await fetch(url(5, 19, 10)).then((r) => r.ok).catch(() => false);
     if (!ok) continue;
     capaNubes?.remove();
-    capaNubes = L.tileLayer(url("{z}", "{y}", "{x}"), { maxNativeZoom: 6, maxZoom: 12, opacity: 0.45, attribution: `Nubes NASA GIBS ${fmtHora.format(new Date(t))}` });
+    capaNubes = L.tileLayer(url("{z}", "{y}", "{x}"), { maxNativeZoom: 6, maxZoom: 12, opacity: 0.4, attribution: `Nubes NASA GIBS ${fmtHora.format(new Date(t))}` });
     if ($("chk-nubes").checked) capaNubes.addTo(mapa);
     return;
   }
