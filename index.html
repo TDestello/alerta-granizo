@@ -369,7 +369,7 @@ function analizarRayos(rayos, riesgoPronostico) {
 }
 
 // ------------------------------------------------------------------ mapa
-const mapa = L.map("mapa", { zoomControl: true, attributionControl: true }).setView([LAT, LON], 8);
+const mapa = L.map("mapa", { zoomControl: true, attributionControl: true, scrollWheelZoom: false }).setView([LAT, LON], 8);
 L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution: "© OpenStreetMap", maxZoom: 12, className: "mapa-base",
 }).addTo(mapa);
