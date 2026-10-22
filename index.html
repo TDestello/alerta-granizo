@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alerta Granizo Arroyo Seco</title>
+<meta name="description" content="Riesgo de granizo y rayos en vivo para Arroyo Seco, Santa Fe. Pronóstico Open-Meteo + rayos del satélite GOES-19.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛈️</text></svg>">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f4f2;
+  --surface-1: #fcfcfb;
+  --border: #e3e2de;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #7a7974;
+  --grid: #ecebe7;
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --flash: #eda100;
+  --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110; --surface-1: #1a1a19; --border: #2e2e2c;
+    --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86; --grid: #2a2a28;
+    --series-1: #3987e5; --series-2: #d95926; --flash: #c98500;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --surface-1: #1a1a19; --border: #2e2e2c;
+  --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86; --grid: #2a2a28;
+  --series-1: #3987e5; --series-2: #d95926; --flash: #c98500;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text-primary);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+main { max-width: 960px; margin: 0 auto; padding: 20px 16px 40px; }
+header h1 { font-size: 22px; margin: 0; letter-spacing: -.01em; }
+header p { margin: 2px 0 0; color: var(--text-secondary); font-size: 14px; }
+.card {
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
+  padding: 16px; margin-top: 16px;
+}
+.card h2 { font-size: 15px; margin: 0 0 10px; color: var(--text-secondary); font-weight: 600; }
+
+/* estado principal */
+#estado { display: flex; gap: 14px; align-items: center; }
+#estado .icono {
+  flex: none; width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 24px; font-weight: 700; color: #fff; background: var(--text-muted);
+}
+#estado .titulo { font-size: 20px; font-weight: 700; }
+#estado .detalle { color: var(--text-secondary); font-size: 14px; white-space: pre-line; }
+
+/* tiles */
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
+.tile { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.tile .k { font-size: 12px; color: var(--text-muted); }
+.tile .v { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tile .s { font-size: 12px; color: var(--text-secondary); }
+@media (max-width: 560px) { .tiles { grid-template-columns: 1fr 1fr; } .tiles .tile:last-child { grid-column: span 2; } }
+
+/* mapa */
+#mapa { height: 380px; border-radius: 10px; margin-top: 6px; z-index: 0; }
+.map-ctrl { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 13px; color: var(--text-secondary); }
+.map-ctrl label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--flash); }
+.ring-label { color: var(--text-secondary); font-size: 11px; font-weight: 600; white-space: nowrap;
+  text-shadow: 0 0 3px var(--surface-1), 0 0 3px var(--surface-1); }
+.leaflet-container { background: var(--surface-1); font: inherit; }
+
+/* gráfico */
+.leyenda { display: flex; gap: 16px; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; flex-wrap: wrap; }
+.leyenda span::before { content: ""; display: inline-block; width: 14px; height: 2px; vertical-align: middle; margin-right: 6px; background: var(--c); }
+#grafico { position: relative; }
+#grafico svg { display: block; width: 100%; overflow: visible; }
+#grafico text { fill: var(--text-muted); font-size: 11px; }
+#tooltip {
+  position: absolute; pointer-events: none; background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 14px rgb(0 0 0 / .12);
+  min-width: 170px; display: none; z-index: 2;
+}
+#tooltip b { display: block; margin-bottom: 4px; }
+#tooltip .fila { display: flex; gap: 6px; align-items: center; color: var(--text-secondary); }
+#tooltip .fila i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex: none; }
+.eventos { margin: 12px 0 0; padding: 0; list-style: none; }
+.eventos li { display: flex; gap: 8px; align-items: baseline; padding: 6px 0; border-top: 1px solid var(--grid); font-size: 14px; }
+.badge { font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 999px; color: #111; flex: none; }
+details { margin-top: 12px; font-size: 13px; }
+summary { cursor: pointer; color: var(--text-secondary); }
+.tabla-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; margin-top: 8px; font-variant-numeric: tabular-nums; }
+th, td { text-align: right; padding: 4px 8px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--text-muted); font-weight: 600; }
+footer { margin-top: 20px; font-size: 12px; color: var(--text-muted); }
+footer a { color: var(--text-secondary); }
+.cargando { color: var(--text-muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Alerta de granizo · Arroyo Seco</h1>
+    <p>Pronóstico (GFS + ECMWF) y rayos en vivo del satélite GOES-19 · <span id="actualizado">cargando…</span></p>
+  </header>
+
+  <section class="card" aria-live="polite">
+    <div id="estado">
+      <div class="icono" id="estado-icono">…</div>
+      <div>
+        <div class="titulo" id="estado-titulo">Cargando datos…</div>
+        <div class="detalle" id="estado-detalle"></div>
+      </div>
+    </div>
+    <div class="tiles">
+      <div class="tile"><div class="k">Rayo más cercano</div><div class="v" id="t-dist">–</div><div class="s" id="t-dist-s">últimos 10 min</div></div>
+      <div class="tile"><div class="k">Rayos a menos de 100 km</div><div class="v" id="t-cant">–</div><div class="s" id="t-cant-s">últimos 10 min</div></div>
+      <div class="tile"><div class="k">Riesgo de granizo próximas 48 h</div><div class="v" id="t-riesgo">–</div><div class="s" id="t-riesgo-s"></div></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Rayos en vivo</h2>
+    <div class="map-ctrl">
+      <span><span class="dot"></span> rayo (más opaco = más reciente)</span>
+      <label><input type="checkbox" id="chk-nubes" checked> nubes (infrarrojo GOES-19)</label>
+      <span id="rayos-estado" class="cargando"></span>
+    </div>
+    <div id="mapa" role="img" aria-label="Mapa de rayos alrededor de Arroyo Seco con anillos de 15, 40 y 100 km"></div>
+  </section>
+
+  <section class="card">
+    <h2>Índice de granizo (SHIP) — próximas 48 h</h2>
+    <div class="leyenda">
+      <span style="--c: var(--series-1)">GFS</span>
+      <span style="--c: var(--series-2)">ECMWF</span>
+    </div>
+    <div id="grafico"><div class="cargando">cargando pronóstico…</div><div id="tooltip"></div></div>
+    <ul class="eventos" id="eventos"></ul>
+    <details>
+      <summary>Ver tabla hora por hora</summary>
+      <div class="tabla-wrap"><table id="tabla"></table></div>
+    </details>
+  </section>
+
+  <footer>
+    <p><b>Cómo leerlo.</b> SHIP ≥ 0.5: granizo posible. SHIP ≥ 1: ambiente para granizo grande.
+      Si la probabilidad de lluvia es menor a 20 % no se cuenta como riesgo. Los rayos marcan dónde hay
+      tormenta fuerte ahora; un salto brusco en la cantidad es señal típica de granizo.</p>
+    <p>Datos: modelos vía <a href="https://open-meteo.com/">Open-Meteo</a> (CC BY 4.0) · rayos: GLM del GOES-19,
+      <a href="https://registry.opendata.aws/noaa-goes/">NOAA</a> · nubes: <a href="https://earthdata.nasa.gov/gibs">NASA GIBS</a> ·
+      mapa © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, © <a href="https://carto.com/">CARTO</a>.</p>
+    <p>Proyecto personal, no oficial. Alertas oficiales: <a href="https://www.smn.gob.ar/alertas">smn.gob.ar/alertas</a>.</p>
+  </footer>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script type="module">
+import h5wasm from "https://cdn.jsdelivr.net/npm/h5wasm@0.10.3/dist/esm/hdf5_hl.js";
+
+// ------------------------------------------------------------------ configuración
+const LAT = -33.1547, LON = -60.5086;
+const MODELOS = ["gfs_seamless", "ecmwf_ifs025"];
+const NOMBRE = { gfs_seamless: "GFS", ecmwf_ifs025: "ECMWF" };
+const COLOR = { gfs_seamless: "--series-1", ecmwf_ifs025: "--series-2" };
+const HORAS = 48, VENTANA_RAYOS = 10, RADIO = 100;
+const NIVELES = ["NINGUNO", "BAJO", "MODERADO", "ALTO"];
+const NIVEL_COLOR = ["--good", "--warning", "--serious", "--critical"];
+const NIVEL_ICONO = ["✓", "!", "!!", "⚠"];
+const RUMBOS = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"];
+const DIAS = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+const VARIABLES = ["cape", "freezing_level_height", "dew_point_2m", "surface_pressure",
+  "temperature_500hPa", "temperature_700hPa", "geopotential_height_500hPa", "geopotential_height_700hPa",
+  "wind_speed_10m", "wind_direction_10m", "wind_speed_500hPa", "wind_direction_500hPa",
+  "precipitation_probability"];
+
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const $ = (id) => document.getElementById(id);
+const fmtHora = new Intl.DateTimeFormat("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hour: "2-digit", minute: "2-digit" });
+const fmtDia = (d) => {
+  const local = new Date(d.getTime() - 3 * 3600e3); // Argentina = UTC-3 todo el año
+  return `${DIAS[local.getUTCDay()]} ${local.getUTCDate()}/${local.getUTCMonth() + 1}`;
+};
+
+// ------------------------------------------------------------------ física (igual que alerta_granizo.py)
+const razonMezcla = (td, p) => { const e = 6.112 * Math.exp(17.67 * td / (td + 243.5)); return 621.97 * e / (p - e); };
+const comp = (v, d) => { const r = d * Math.PI / 180; return [-v * Math.sin(r), -v * Math.cos(r)]; };
+function cortante(v10, d10, v500, d500) {
+  const [u1, w1] = comp(v10, d10), [u2, w2] = comp(v500, d500);
+  return Math.hypot(u2 - u1, w2 - w1);
+}
+function isotermaCero(t700, z700, t500, z500, fl) {
+  if (fl != null) return fl;
+  if (t700 <= 0) return z700 + t700 / 6.5 * 1000;
+  return z700 + (z500 - z700) * t700 / (t700 - t500);
+}
+function ship(cape, mr, lr, t500, cort, fl) {
+  if (!cape || cape <= 0) return 0;
+  mr = Math.min(Math.max(mr, 11), 13.6);
+  cort = Math.min(Math.max(cort, 7), 27);
+  t500 = Math.min(t500, -5.5);
+  let s = cape * mr * lr * (-t500) * cort / 42e6;
+  if (cape < 1300) s *= cape / 1300;
+  if (lr < 5.8) s *= lr / 5.8;
+  if (fl < 2400) s *= fl / 2400;
+  return Math.max(s, 0);
+}
+function nivelRiesgo(s, cape, prob) {
+  if (prob != null && prob < 20) return 0;
+  let n = s >= 1 ? 3 : s >= 0.5 ? 2 : (s >= 0.2 && cape >= 500) ? 1 : 0;
+  if (n && prob != null && prob < 40) n -= 1;
+  return n;
+}
+
+// ------------------------------------------------------------------ pronóstico
+async function cargarPronostico() {
+  const p = new URLSearchParams({
+    latitude: LAT, longitude: LON, hourly: VARIABLES.join(","), models: MODELOS.join(","),
+    forecast_days: 3, timeformat: "unixtime", wind_speed_unit: "ms",
+  });
+  const r = await fetch("https://api.open-meteo.com/v1/forecast?" + p);
+  const d = await r.json();
+  if (d.error) throw new Error(d.reason);
+  const h = d.hourly, ahora = Date.now(), filas = [];
+  h.time.forEach((t, i) => {
+    const hora = new Date(t * 1000);
+    if (hora < ahora - 3600e3 || hora > ahora + HORAS * 3600e3) return;
+    const modelos = {};
+    for (const m of MODELOS) {
+      const g = (v) => (h[`${v}_${m}`] || [])[i] ?? null;
+      const req = ["cape", "dew_point_2m", "surface_pressure", "temperature_500hPa", "temperature_700hPa",
+        "geopotential_height_500hPa", "geopotential_height_700hPa", "wind_speed_10m", "wind_direction_10m",
+        "wind_speed_500hPa", "wind_direction_500hPa"].map(g);
+      if (req.some((x) => x == null)) continue;
+      const [cape, td, ps, t500, t700, z500, z700, v10, d10, v500, d500] = req;
+      const lr = (t700 - t500) / ((z500 - z700) / 1000);
+      const fl = isotermaCero(t700, z700, t500, z500, g("freezing_level_height"));
+      const cort = cortante(v10, d10, v500, d500);
+      const s = ship(cape, razonMezcla(td, ps), lr, t500, cort, fl);
+      const prob = g("precipitation_probability");
+      modelos[m] = { ship: s, cape, prob, cort, fl, nivel: nivelRiesgo(s, cape, prob) };
+    }
+    if (Object.keys(modelos).length)
+      filas.push({ hora, modelos, nivel: Math.max(...Object.values(modelos).map((x) => x.nivel)) });
+  });
+  return filas;
+}
+
+function resumir(filas) {
+  const eventos = []; let actual = null;
+  const maxShip = (f) => Math.max(...Object.values(f.modelos).map((x) => x.ship));
+  for (const f of filas) {
+    if (!f.nivel) { actual = null; continue; }
+    if (actual && f.hora - actual.fin <= 2 * 3600e3) {
+      actual.fin = f.hora;
+      if (f.nivel > actual.nivel || (f.nivel === actual.nivel && maxShip(f) > maxShip(actual.pico)))
+        Object.assign(actual, { nivel: f.nivel, pico: f });
+    } else {
+      actual = { inicio: f.hora, fin: f.hora, nivel: f.nivel, pico: f };
+      eventos.push(actual);
+    }
+  }
+  return eventos;
+}
+
+// ------------------------------------------------------------------ rayos GOES-19 GLM
+const BUCKET = "https://noaa-goes19.s3.amazonaws.com";
+const cacheGlm = new Map(); // clave -> {inicio, rayos:[{t,d,rumbo,lat,lon}]}
+let h5listo = null;
+
+function distRumbo(lat, lon) {
+  const r = Math.PI / 180, p1 = LAT * r, p2 = lat * r, dl = (lon - LON) * r;
+  const a = Math.sin((p2 - p1) / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+  const d = 2 * 6371 * Math.asin(Math.sqrt(a));
+  const b = Math.atan2(Math.sin(dl) * Math.cos(p2), Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl));
+  return [d, ((b / r) + 360) % 360];
+}
+
+function prefijoHora(d) {
+  const inicioAnio = Date.UTC(d.getUTCFullYear(), 0, 1);
+  const jj = String(Math.floor((d - inicioAnio) / 864e5) + 1).padStart(3, "0");
+  return `GLM-L2-LCFA/${d.getUTCFullYear()}/${jj}/${String(d.getUTCHours()).padStart(2, "0")}/`;
+}
+
+async function listarGlm(desde) {
+  const prefijos = [...new Set([prefijoHora(desde), prefijoHora(new Date())])];
+  const archivos = [];
+  for (const pre of prefijos) {
+    const xml = await (await fetch(`${BUCKET}/?list-type=2&prefix=${pre}`)).text();
+    for (const [, k] of xml.matchAll(/<Key>([^<]+\.nc)<\/Key>/g)) {
+      const m = k.match(/_s(\d{4})(\d{3})(\d{2})(\d{2})(\d{2})/);
+      const inicio = new Date(Date.UTC(+m[1], 0, 1, +m[3], +m[4], +m[5]) + (+m[2] - 1) * 864e5);
+      if (inicio >= desde) archivos.push({ clave: k, inicio });
+    }
+  }
+  return archivos;
+}
+
+async function leerGlm({ clave, inicio }) {
+  const Module = await h5listo;
+  const buf = new Uint8Array(await (await fetch(`${BUCKET}/${clave}`)).arrayBuffer());
+  const nombre = clave.split("/").pop();
+  Module.FS.writeFile(nombre, buf);
+  const f = new h5wasm.File(nombre, "r");
+  const lats = f.get("flash_lat").value, lons = f.get("flash_lon").value;
+  f.close(); Module.FS.unlink(nombre);
+  const rayos = [];
+  for (let i = 0; i < lats.length; i++) {
+    if (Math.abs(lats[i] - LAT) > 1.5 || Math.abs(lons[i] - LON) > 1.8) continue;
+    const [d, rumbo] = distRumbo(lats[i], lons[i]);
+    if (d <= RADIO) rayos.push({ t: inicio, d, rumbo, lat: lats[i], lon: lons[i] });
+  }
+  return { inicio, rayos };
+}
+
+async function cargarRayos() {
+  h5listo ??= h5wasm.ready;
+  const desde = new Date(Date.now() - VENTANA_RAYOS * 60e3);
+  const archivos = await listarGlm(desde);
+  const nuevos = archivos.filter((a) => !cacheGlm.has(a.clave));
+  for (let i = 0; i < nuevos.length; i += 6) {
+    $("rayos-estado").textContent = `descargando datos del satélite ${Math.min(i + 6, nuevos.length)}/${nuevos.length}…`;
+    const lote = await Promise.all(nuevos.slice(i, i + 6).map(leerGlm));
+    lote.forEach((x, j) => cacheGlm.set(nuevos[i + j].clave, x));
+  }
+  for (const [k, v] of cacheGlm) if (v.inicio < desde) cacheGlm.delete(k);
+  return { rayos: [...cacheGlm.values()].flatMap((v) => v.rayos), archivos: archivos.length };
+}
+
+// Igual que analizar_rayos() del script.
+function analizarRayos(rayos, riesgoPronostico) {
+  if (!rayos.length) return { nivel: 0, lineas: [`Sin rayos a menos de ${RADIO} km`] };
+  const mitad = Date.now() - VENTANA_RAYOS / 2 * 60e3;
+  const rec = rayos.filter((r) => r.t >= mitad), ant = rayos.filter((r) => r.t < mitad);
+  const cerca = rayos.reduce((a, b) => (b.d < a.d ? b : a));
+  let nivel = cerca.d <= 15 ? 3 : cerca.d <= 40 ? 2 : 1;
+  const lineas = [`Rayo más cercano a ${cerca.d.toFixed(0)} km al ${RUMBOS[Math.round(cerca.rumbo / 45) % 8]}`];
+  let tendencia = null;
+  if (rec.length >= 3 && ant.length >= 3) {
+    const media = (l) => l.reduce((s, r) => s + r.d, 0) / l.length;
+    const v = (media(ant) - media(rec)) / (VENTANA_RAYOS / 2);
+    if (v > 0.3 && v <= 2) tendencia = `Se acerca a ~${(v * 60).toFixed(0)} km/h: llegaría en ~${(cerca.d / v).toFixed(0)} min`;
+    else if (v > 2) tendencia = "Se están formando celdas nuevas más cerca";
+    else if (v < -0.3) tendencia = "Se está alejando";
+    if (tendencia) lineas.push(tendencia);
+  }
+  const salto = rec.length >= 10 && rec.length >= 2 * Math.max(ant.length, 1);
+  if (salto) { lineas.push(`Salto brusco de rayos (${ant.length} → ${rec.length}): señal típica de granizo`); nivel = Math.max(nivel, 2); }
+  if (riesgoPronostico >= 2) lineas.push(`El pronóstico marca ambiente de granizo (${NIVELES[riesgoPronostico]})`);
+  else if (nivel === 1 && !salto) nivel = 0;
+  return { nivel, lineas, cerca, tendencia };
+}
+
+// ------------------------------------------------------------------ mapa
+const oscuro = () => css("color-scheme") === "dark";
+const mapa = L.map("mapa", { zoomControl: true, attributionControl: true }).setView([LAT, LON], 8);
+L.tileLayer(`https://{s}.basemaps.cartocdn.com/${oscuro() ? "dark_all" : "light_all"}/{z}/{x}/{y}{r}.png`, {
+  attribution: "© OpenStreetMap © CARTO", subdomains: "abcd", maxZoom: 12,
+}).addTo(mapa);
+let capaNubes = null;
+const capaRayos = L.layerGroup().addTo(mapa);
+
+for (const km of [15, 40, 100]) {
+  L.circle([LAT, LON], { radius: km * 1000, color: css("--text-muted"), weight: 1, dashArray: "4 4", fill: false, interactive: false }).addTo(mapa);
+  L.marker([LAT + km / 111, LON], {
+    interactive: false,
+    icon: L.divIcon({ className: "ring-label", html: `${km} km`, iconSize: [40, 14], iconAnchor: [20, 16] }),
+  }).addTo(mapa);
+}
+L.circleMarker([LAT, LON], { radius: 6, color: css("--surface-1"), weight: 2, fillColor: css("--text-primary"), fillOpacity: 1 })
+  .bindTooltip("Arroyo Seco").addTo(mapa);
+
+async function ponerNubes() {
+  // GIBS publica el infrarrojo del GOES-19 cada 10 min con ~30-60 min de atraso: busco la última imagen disponible.
+  for (let atraso = 30; atraso <= 120; atraso += 10) {
+    const t = new Date(Math.floor((Date.now() - atraso * 60e3) / 600e3) * 600e3).toISOString().slice(0, 17) + "00Z";
+    const url = (z, y, x) => `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/GOES-East_ABI_Band13_Clean_Infrared/default/${t}/GoogleMapsCompatible_Level6/${z}/${y}/${x}.png`;
+    const ok = await fetch(url(5, 19, 10)).then((r) => r.ok).catch(() => false);
+    if (!ok) continue;
+    capaNubes?.remove();
+    capaNubes = L.tileLayer(url("{z}", "{y}", "{x}"), { maxNativeZoom: 6, maxZoom: 12, opacity: 0.45, attribution: `Nubes NASA GIBS ${fmtHora.format(new Date(t))}` });
+    if ($("chk-nubes").checked) capaNubes.addTo(mapa);
+    return;
+  }
+}
+$("chk-nubes").addEventListener("change", (e) => capaNubes && (e.target.checked ? capaNubes.addTo(mapa) : capaNubes.remove()));
+
+function dibujarRayos(rayos) {
+  capaRayos.clearLayers();
+  const ahora = Date.now();
+  for (const r of rayos) {
+    const edad = (ahora - r.t) / (VENTANA_RAYOS * 60e3); // 0 = recién, 1 = viejo
+    L.circleMarker([r.lat, r.lon], {
+      radius: 5, color: css("--surface-1"), weight: 2, fillColor: css("--flash"), fillOpacity: 1 - 0.7 * Math.min(edad, 1), opacity: 1,
+    }).bindTooltip(`${fmtHora.format(r.t)} · ${r.d.toFixed(0)} km al ${RUMBOS[Math.round(r.rumbo / 45) % 8]}`).addTo(capaRayos);
+  }
+}
+
+// ------------------------------------------------------------------ gráfico SHIP
+function dibujarGrafico(filas) {
+  const cont = $("grafico"), tip = $("tooltip");
+  cont.querySelector(".cargando")?.remove();
+  cont.querySelector("svg")?.remove();
+  const W = cont.clientWidth, H = 230, m = { t: 10, r: 52, b: 26, l: 32 };
+  const iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const t0 = filas[0].hora.getTime(), t1 = filas.at(-1).hora.getTime();
+  const maxS = Math.max(1.4, ...filas.flatMap((f) => Object.values(f.modelos).map((x) => x.ship))) * 1.08;
+  const x = (t) => m.l + (t - t0) / (t1 - t0) * iw, y = (v) => m.t + ih - v / maxS * ih;
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("height", H);
+  svg.setAttribute("role", "img"); svg.setAttribute("aria-label", "Índice SHIP por hora para GFS y ECMWF");
+  const el = (tag, attrs, txt) => { const e = document.createElementNS(ns, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (txt != null) e.textContent = txt; svg.appendChild(e); return e; };
+
+  // grilla y umbrales
+  for (let v = 0; v <= maxS; v += 0.5) {
+    el("line", { x1: m.l, x2: m.l + iw, y1: y(v), y2: y(v), stroke: css("--grid"), "stroke-width": 1 });
+    el("text", { x: m.l - 6, y: y(v) + 4, "text-anchor": "end" }, v.toFixed(1));
+  }
+  for (const [v, n] of [[0.5, 2], [1, 3]]) {
+    el("line", { x1: m.l, x2: m.l + iw, y1: y(v), y2: y(v), stroke: css(NIVEL_COLOR[n]), "stroke-width": 1, "stroke-dasharray": "4 4" });
+    el("text", { x: m.l + iw + 4, y: y(v) + 4 }, NIVELES[n].toLowerCase());
+  }
+  // eje x: cada 6 h, con el día a medianoche
+  for (const f of filas) {
+    const local = new Date(f.hora.getTime() - 3 * 3600e3), hh = local.getUTCHours();
+    if (hh % 6) continue;
+    el("line", { x1: x(f.hora), x2: x(f.hora), y1: m.t + ih, y2: m.t + ih + 4, stroke: css("--text-muted") });
+    el("text", { x: x(f.hora), y: H - 6, "text-anchor": "middle" }, hh === 0 ? fmtDia(f.hora) : `${hh}h`);
+  }
+  // ahora
+  const xa = x(Math.min(Math.max(Date.now(), t0), t1));
+  el("line", { x1: xa, x2: xa, y1: m.t, y2: m.t + ih, stroke: css("--text-muted"), "stroke-width": 1 });
+  el("text", { x: xa + 4, y: m.t + 10 }, "ahora");
+
+  // series
+  for (const mod of MODELOS) {
+    const pts = filas.filter((f) => f.modelos[mod]).map((f) => [x(f.hora), y(f.modelos[mod].ship)]);
+    if (!pts.length) continue;
+    el("path", { d: "M" + pts.map((p) => p.join(",")).join("L"), fill: "none", stroke: css(COLOR[mod]), "stroke-width": 2, "stroke-linejoin": "round" });
+    const [lx, ly] = pts.at(-1);
+    el("text", { x: lx + 4, y: ly + (mod === "gfs_seamless" ? -4 : 12), style: `fill:var(--text-secondary)` }, NOMBRE[mod]);
+  }
+
+  // hover: crosshair + tooltip
+  const cross = el("line", { y1: m.t, y2: m.t + ih, stroke: css("--text-secondary"), "stroke-width": 1, visibility: "hidden" });
+  const marcas = MODELOS.map((mod) => el("circle", { r: 4, fill: css(COLOR[mod]), stroke: css("--surface-1"), "stroke-width": 2, visibility: "hidden" }));
+  const hit = el("rect", { x: m.l, y: 0, width: iw, height: H, fill: "transparent" });
+  const mover = (ev) => {
+    const px = ev.offsetX * (W / svg.clientWidth);
+    const t = t0 + (px - m.l) / iw * (t1 - t0);
+    const f = filas.reduce((a, b) => (Math.abs(b.hora - t) < Math.abs(a.hora - t) ? b : a));
+    cross.setAttribute("x1", x(f.hora)); cross.setAttribute("x2", x(f.hora)); cross.setAttribute("visibility", "visible");
+    MODELOS.forEach((mod, i) => {
+      const d = f.modelos[mod];
+      marcas[i].setAttribute("visibility", d ? "visible" : "hidden");
+      if (d) { marcas[i].setAttribute("cx", x(f.hora)); marcas[i].setAttribute("cy", y(d.ship)); }
+    });
+    tip.innerHTML = `<b>${fmtDia(f.hora)} ${fmtHora.format(f.hora)} · riesgo ${NIVELES[f.nivel].toLowerCase()}</b>` +
+      MODELOS.filter((mod) => f.modelos[mod]).map((mod) => {
+        const d = f.modelos[mod];
+        return `<div class="fila" style="--c:var(${COLOR[mod]})"><i></i>${NOMBRE[mod]}: SHIP ${d.ship.toFixed(2)} · CAPE ${d.cape.toFixed(0)} · lluvia ${d.prob ?? "–"}%</div>`;
+      }).join("");
+    tip.style.display = "block";
+    const left = x(f.hora) * (svg.clientWidth / W);
+    tip.style.left = Math.min(Math.max(left - tip.offsetWidth / 2, 0), cont.clientWidth - tip.offsetWidth) + "px";
+    tip.style.top = "-8px"; tip.style.transform = "translateY(-100%)";
+  };
+  hit.addEventListener("pointermove", mover);
+  hit.addEventListener("pointerdown", mover);
+  hit.addEventListener("pointerleave", () => { tip.style.display = "none"; cross.setAttribute("visibility", "hidden"); marcas.forEach((c) => c.setAttribute("visibility", "hidden")); });
+  cont.insertBefore(svg, tip);
+}
+
+function dibujarTabla(filas) {
+  const enc = `<tr><th>Hora</th>${MODELOS.map((m) => `<th>${NOMBRE[m]} SHIP</th><th>CAPE</th><th>Lluvia</th>`).join("")}<th>Riesgo</th></tr>`;
+  $("tabla").innerHTML = enc + filas.map((f) => `<tr><td>${fmtDia(f.hora)} ${fmtHora.format(f.hora)}</td>` +
+    MODELOS.map((m) => { const d = f.modelos[m]; return d ? `<td>${d.ship.toFixed(2)}</td><td>${d.cape.toFixed(0)}</td><td>${d.prob ?? "–"}%</td>` : "<td>–</td><td>–</td><td>–</td>"; }).join("") +
+    `<td>${NIVELES[f.nivel].toLowerCase()}</td></tr>`).join("");
+}
+
+function badge(n) {
+  return `<span class="badge" style="background:var(${NIVEL_COLOR[n]})">${NIVEL_ICONO[n]} ${NIVELES[n]}</span>`;
+}
+
+// ------------------------------------------------------------------ estado general
+let filas = [], eventos = [], vivo = null;
+
+function riesgoCercano() {
+  const ahora = Date.now();
+  return Math.max(0, ...filas.filter((f) => f.hora >= ahora - 2 * 3600e3 && f.hora <= ahora + 6 * 3600e3).map((f) => f.nivel));
+}
+
+function pintarEstado() {
+  const peorEvento = eventos.reduce((a, b) => (!a || b.nivel > a.nivel ? b : a), null);
+  let nivel = 0, titulo = "Sin riesgo de granizo", detalle = "Ni el pronóstico ni los rayos muestran señales en las próximas 48 h.";
+  if (peorEvento) {
+    nivel = peorEvento.nivel;
+    titulo = `Riesgo ${NIVELES[nivel].toLowerCase()} de granizo`;
+    detalle = `${fmtDia(peorEvento.inicio)} de ${fmtHora.format(peorEvento.inicio)} a ${fmtHora.format(new Date(peorEvento.fin.getTime() + 3600e3))}`;
+  }
+  if (vivo && vivo.nivel >= 2 && vivo.nivel >= nivel) {
+    nivel = vivo.nivel;
+    titulo = vivo.nivel === 3 ? "Tormenta encima" : "Tormenta cerca";
+    detalle = vivo.lineas.join("\n");
+  }
+  const ic = $("estado-icono");
+  ic.textContent = NIVEL_ICONO[nivel];
+  ic.style.background = css(NIVEL_COLOR[nivel]);
+  ic.style.color = nivel === 1 ? "#111" : "#fff";
+  $("estado-titulo").textContent = titulo;
+  $("estado-detalle").textContent = detalle;
+  document.title = nivel ? `${NIVELES[nivel]} · Alerta Granizo Arroyo Seco` : "Alerta Granizo Arroyo Seco";
+}
+
+async function actualizarPronostico() {
+  try {
+    filas = await cargarPronostico();
+    eventos = resumir(filas);
+    dibujarGrafico(filas);
+    dibujarTabla(filas);
+    const maxN = Math.max(0, ...filas.map((f) => f.nivel));
+    const maxS = Math.max(...filas.flatMap((f) => Object.values(f.modelos).map((x) => x.ship)));
+    $("t-riesgo").innerHTML = badge(maxN);
+    $("t-riesgo-s").textContent = `SHIP máximo ${maxS.toFixed(2)}`;
+    $("eventos").innerHTML = eventos.length
+      ? eventos.map((e) => `<li>${badge(e.nivel)}<span>${fmtDia(e.inicio)} ${fmtHora.format(e.inicio)}–${fmtHora.format(new Date(e.fin.getTime() + 3600e3))} · pico ${fmtHora.format(e.pico.hora)} (SHIP ${Math.max(...Object.values(e.pico.modelos).map((x) => x.ship)).toFixed(2)})</span></li>`).join("")
+      : `<li>${badge(0)}<span>Ninguna hora con riesgo en las próximas 48 h.</span></li>`;
+  } catch (e) {
+    $("grafico").querySelector(".cargando")?.replaceChildren(`No se pudo cargar el pronóstico: ${e.message}`);
+  }
+  pintarEstado();
+}
+
+async function actualizarRayos() {
+  try {
+    const { rayos, archivos } = await cargarRayos();
+    vivo = analizarRayos(rayos, riesgoCercano());
+    dibujarRayos(rayos);
+    $("t-dist").textContent = vivo.cerca ? `${vivo.cerca.d.toFixed(0)} km` : "–";
+    $("t-dist-s").textContent = vivo.cerca ? `al ${RUMBOS[Math.round(vivo.cerca.rumbo / 45) % 8]}${vivo.tendencia ? " · " + vivo.tendencia.split(":")[0].toLowerCase() : ""}` : "ninguno a menos de 100 km";
+    $("t-cant").textContent = rayos.length;
+    $("rayos-estado").textContent = `${archivos} archivos del satélite, últimos ${VENTANA_RAYOS} min · ${fmtHora.format(new Date())}`;
+  } catch (e) {
+    $("rayos-estado").textContent = `No se pudieron cargar los rayos: ${e.message}`;
+  }
+  $("actualizado").textContent = `actualizado ${fmtHora.format(new Date())}`;
+  pintarEstado();
+}
+
+await actualizarPronostico();
+actualizarRayos();
+ponerNubes();
+setInterval(actualizarRayos, 2 * 60e3);
+setInterval(actualizarPronostico, 30 * 60e3);
+setInterval(ponerNubes, 10 * 60e3);
+let ancho = innerWidth;
+addEventListener("resize", () => { if (filas.length && innerWidth !== ancho) { ancho = innerWidth; dibujarGrafico(filas); } });
+</script>
+</body>
+</html>
