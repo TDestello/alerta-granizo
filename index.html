@@ -193,7 +193,7 @@ const VARIABLES = ["cape", "freezing_level_height", "dew_point_2m", "surface_pre
 
 const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const $ = (id) => document.getElementById(id);
-const fmtHora = new Intl.DateTimeFormat("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hour: "2-digit", minute: "2-digit" });
+const fmtHora = new Intl.DateTimeFormat("es-AR", { timeZone: "America/Argentina/Buenos_Aires", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 const fmtDia = (d) => {
   const local = new Date(d.getTime() - 3 * 3600e3); // Argentina = UTC-3 todo el año
   return `${DIAS[local.getUTCDay()]} ${local.getUTCDate()}/${local.getUTCMonth() + 1}`;
@@ -526,7 +526,7 @@ function pintarEstado() {
   ic.style.color = nivel === 1 ? "#111" : "#fff";
   $("estado-titulo").textContent = titulo;
   $("estado-detalle").textContent = detalle;
-  document.title = nivel ? `${NIVELES[nivel]} · Alerta Granizo Arroyo Seco` : "Alerta Granizo Arroyo Seco";
+  document.title = nivel ? `${NIVELES[nivel]} · Alerta Granizo ${LUGAR}` : `Alerta Granizo ${LUGAR}`;
 }
 
 async function actualizarPronostico() {
