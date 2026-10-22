@@ -437,10 +437,11 @@ function dibujarGrafico(filas) {
     el("line", { x1: m.l, x2: m.l + iw, y1: y(v), y2: y(v), stroke: css(NIVEL_COLOR[n]), "stroke-width": 1, "stroke-dasharray": "4 4" });
     el("text", { x: m.l + iw + 4, y: y(v) + 4 }, NIVELES[n].toLowerCase());
   }
-  // eje x: cada 6 h, con el día a medianoche
+  // eje x: cada 6 h (12 h en pantallas angostas), con el día a medianoche
+  const paso = iw < 450 ? 12 : 6;
   for (const f of filas) {
     const local = new Date(f.hora.getTime() - 3 * 3600e3), hh = local.getUTCHours();
-    if (hh % 6) continue;
+    if (hh % paso) continue;
     el("line", { x1: x(f.hora), x2: x(f.hora), y1: m.t + ih, y2: m.t + ih + 4, stroke: css("--text-muted") });
     el("text", { x: x(f.hora), y: H - 6, "text-anchor": "middle" }, hh === 0 ? fmtDia(f.hora) : `${hh}h`);
   }
